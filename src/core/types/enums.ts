@@ -61,7 +61,7 @@ export type AffixType = 'prefix' | 'suffix';
 
 /**
  * アフィックスや装備が変化させるステータスのキー(仕様 §9 の stat 列に準拠)。
- * ブロックB(500種生成)で状態異常付与系・スキル強化系のキーを追加する。
+ * ブロックBで追加: 一次ステ補正・リジェネ・リーチ・状態異常付与/耐性・スキル強化系。
  */
 export const STAT_IDS = [
   // --- フラット加算 ---
@@ -76,6 +76,12 @@ export const STAT_IDS = [
   'lightATK_flat',
   'darkATK_flat',
   'armorDEF_flat',
+  // --- 一次ステータス補正 ---
+  'str_flat',
+  'dex_flat',
+  'int_flat',
+  'vit_flat',
+  'luk_flat',
   // --- 増加% ---
   'dmg_pct',
   'atkSpeed_pct',
@@ -91,6 +97,22 @@ export const STAT_IDS = [
   'darkRes_pct',
   'evasion_pct',
   'block_pct',
+  'ailmentRes_pct', // 状態異常耐性(全種共通)
+  'thorns_flat', // 被物理攻撃時の反射ダメージ
+  // --- 持続回復・リーチ ---
+  'hpRegen_flat', // ターンごとのHP回復
+  'mpRegen_flat', // ターンごとのMP回復
+  'lifeLeech_pct', // 与ダメージのHP吸収%
+  'manaLeech_pct', // 与ダメージのMP吸収%
+  // --- 状態異常付与(通常攻撃・攻撃スキルに付与判定を追加) ---
+  'poisonChance_pct',
+  'paralysisChance_pct',
+  'burnChance_pct',
+  'freezeChance_pct',
+  'silenceChance_pct',
+  // --- スキル強化 ---
+  'allSkillLevel_flat', // 全スキルレベル+n
+  'mpCost_pct', // MP消費軽減%(正の値で軽減)
   // --- ユーティリティ ---
   'rarity_pct', // magic find
   'exp_pct',
