@@ -1,0 +1,45 @@
+# GitHub Pages への自動デプロイ。
+# main と開発ブランチへの push で、テスト→ビルド→公開まで行う。
+# 公開URL: https://nullesg.github.io/HAKUSURA/
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - claude/hopeful-wright-r59v4k
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run
+      # Pages はサブパス配信のため base を指定(vite-plugin-pwa も base に追従する)
+      - run: npm run build -- --base=/HAKUSURA/
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
