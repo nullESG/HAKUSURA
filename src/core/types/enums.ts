@@ -59,44 +59,57 @@ export type EquipSlot = (typeof EQUIP_SLOTS)[number];
 /** アフィックスの接頭辞 / 接尾辞(仕様 §5-4)。 */
 export type AffixType = 'prefix' | 'suffix';
 
+/** 物理以外の属性(属性別アフィックスの派生に使う)。 */
+export type NonPhysElement = Exclude<ElementType, 'physical'>;
+
 /**
  * アフィックスや装備が変化させるステータスのキー(仕様 §9 の stat 列に準拠)。
- * ブロックB(500種生成)で状態異常付与系・スキル強化系のキーを追加する。
+ * 属性別・状態異常別はテンプレートリテラル型で派生する
+ * (例: `fireATK_flat`, `poisonApply_pct`)。
  */
-export const STAT_IDS = [
+export type StatId =
   // --- フラット加算 ---
-  'maxHP_flat',
-  'maxMP_flat',
-  'physATK_flat',
-  'magicATK_flat',
-  'fireATK_flat',
-  'iceATK_flat',
-  'lightningATK_flat',
-  'poisonATK_flat',
-  'lightATK_flat',
-  'darkATK_flat',
-  'armorDEF_flat',
+  | 'maxHP_flat'
+  | 'maxMP_flat'
+  | 'physATK_flat'
+  | 'magicATK_flat'
+  | `${NonPhysElement}ATK_flat`
+  | 'armorDEF_flat'
+  | 'hpRegen_flat'
+  | 'mpRegen_flat'
   // --- 増加% ---
-  'dmg_pct',
-  'atkSpeed_pct',
-  'speed_pct',
-  'critChance_pct',
-  'critDmg_pct',
+  | 'dmg_pct'
+  | 'physDmg_pct'
+  | 'magicDmg_pct'
+  | `${NonPhysElement}Dmg_pct`
+  | 'atkSpeed_pct'
+  | 'castSpeed_pct'
+  | 'speed_pct'
+  | 'moveSpeed_pct'
+  // --- クリティカル系 ---
+  | 'critChance_pct'
+  | 'critDmg_pct'
+  | `${NonPhysElement}CritChance_pct`
+  | `${NonPhysElement}CritDmg_pct`
   // --- 防御系 ---
-  'fireRes_pct',
-  'iceRes_pct',
-  'lightningRes_pct',
-  'poisonRes_pct',
-  'lightRes_pct',
-  'darkRes_pct',
-  'evasion_pct',
-  'block_pct',
+  | `${NonPhysElement}Res_pct`
+  | 'allRes_pct'
+  | 'evasion_pct'
+  | 'block_pct'
+  | 'physReduction_pct'
+  | `${AilmentType}AilRes_pct`
+  // --- 状態異常付与系 ---
+  | `${AilmentType}Apply_pct`
+  | `${AilmentType}Effect_pct`
   // --- ユーティリティ ---
-  'rarity_pct', // magic find
-  'exp_pct',
-  'gold_pct',
-] as const;
-export type StatId = (typeof STAT_IDS)[number];
+  | 'rarity_pct' // magic find
+  | 'exp_pct'
+  | 'gold_pct'
+  // --- スキル強化系 ---
+  | `${SkillKind}Power_pct`
+  | `${SkillKind}MpCost_pct`
+  | `${NonPhysElement}SkillPower_pct`
+  | 'mpCost_pct';
 
 /** stat → 数値の集計マップ。装備・パッシブ・バフの合算に使う。 */
 export type StatMap = Partial<Record<StatId, number>>;
