@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { isAlive, nextActorId } from '../../core/combat/battleEngine';
 import type { BattleEvent, CombatantState } from '../../core/combat/combatTypes';
 import { getSkillById } from '../../data/skills';
 import { useGameStore } from '../../store/gameStore';
 import { AILMENT_LABELS, itemDisplayName, RARITY_TEXT_CLASS } from '../labels';
 import { Bar, Button } from '../components/shared';
+
+/** オート戦闘の1手ごとの間隔(ms)。ログを目で追える速さ。 */
+const AUTO_STEP_MS = 450;
 
 /** 戦闘イベントをログ行に変換する。 */
 function formatEvent(event: BattleEvent, nameOf: (id: string) => string): string | undefined {
@@ -46,11 +49,13 @@ function CombatantCard({
   combatant,
   active,
   targetable,
+  dimmed,
   onSelect,
 }: {
   combatant: CombatantState;
   active: boolean;
   targetable: boolean;
+  dimmed: boolean;
   onSelect?: () => void;
 }) {
   const dead = !isAlive(combatant);
@@ -62,11 +67,13 @@ function CombatantCard({
       className={`flex-1 rounded-lg border p-2 text-left transition-all ${
         dead
           ? 'border-neutral-900 bg-neutral-950 opacity-40'
-          : active
-            ? 'border-amber-500 bg-neutral-900'
-            : targetable
-              ? 'border-rose-500/70 bg-neutral-900 active:bg-neutral-800'
-              : 'border-neutral-800 bg-neutral-900'
+          : targetable
+            ? 'motion-safe:animate-pulse border-rose-400 bg-rose-950/40 ring-2 ring-rose-400/70 active:bg-rose-900/40'
+            : active
+              ? 'border-amber-500 bg-neutral-900'
+              : dimmed
+                ? 'border-neutral-800 bg-neutral-900 opacity-50'
+                : 'border-neutral-800 bg-neutral-900'
       }`}
     >
       <div className="flex items-center justify-between gap-1">
@@ -96,13 +103,17 @@ function CombatantCard({
   );
 }
 
-type PendingCommand = { kind: 'attack' } | { kind: 'skill'; skillId: string };
+type PendingCommand =
+  | { kind: 'attack'; targetSide: 'enemy' }
+  | { kind: 'skill'; skillId: string; targetSide: 'enemy' | 'party' };
 
 export function BattleScreen() {
   const battle = useGameStore((s) => s.battle);
   const battleLog = useGameStore((s) => s.battleLog);
   const lastRewards = useGameStore((s) => s.lastRewards);
   const currentDepth = useGameStore((s) => s.currentDepth);
+  const autoBattle = useGameStore((s) => s.autoBattle);
+  const setAutoBattle = useGameStore((s) => s.setAutoBattle);
   const playerAction = useGameStore((s) => s.playerAction);
   const dismissRewards = useGameStore((s) => s.dismissRewards);
   const retreat = useGameStore((s) => s.retreat);
@@ -114,45 +125,77 @@ export function BattleScreen() {
     return (id: string): string => map.get(id) ?? id;
   }, [battle?.combatants]);
 
+  const actorId = battle?.phase === 'active' ? nextActorId(battle) : undefined;
+
+  // オート戦闘: 一定間隔で自動行動(トグルOFF・戦闘終了で停止)
+  useEffect(() => {
+    if (!autoBattle || !battle || battle.phase !== 'active' || !actorId) return;
+    const timer = setTimeout(() => {
+      setPending(undefined);
+      playerAction('auto');
+    }, AUTO_STEP_MS);
+    return () => clearTimeout(timer);
+  }, [autoBattle, battle, actorId, playerAction]);
+
   if (!battle) return null;
   const enemies = battle.combatants.filter((c) => c.side === 'enemy');
   const partySide = battle.combatants.filter((c) => c.side === 'party');
-  const actorId = battle.phase === 'active' ? nextActorId(battle) : undefined;
   const actor = actorId ? battle.combatants.find((c) => c.id === actorId) : undefined;
 
-  const needsTarget =
-    pending &&
-    (pending.kind === 'attack' || getSkillById(pending.skillId).scope === 'singleEnemy');
-  const needsAllyTarget = pending?.kind === 'skill' && getSkillById(pending.skillId).scope === 'singleAlly';
-
-  const act = (targetId?: string): void => {
-    if (!pending) return;
-    const fail =
-      pending.kind === 'attack'
-        ? playerAction({ type: 'attack', targetId: targetId! })
-        : playerAction(
-            targetId !== undefined
-              ? { type: 'skill', skillId: pending.skillId, targetId }
-              : { type: 'skill', skillId: pending.skillId },
-          );
-    if (fail) {
-      setNotice(
-        fail === 'not_enough_mp'
-          ? 'MPが足りない!'
-          : fail === 'silenced'
-            ? '沈黙していて詠唱できない!'
-            : fail === 'summon_limit'
-              ? 'これ以上召喚できない!'
-              : '行動できない',
-      );
-    } else {
-      setNotice(undefined);
-    }
+  const runAction = (
+    command: PendingCommand | { kind: 'guard' },
+    targetId?: string,
+  ): void => {
     setPending(undefined);
+    const fail =
+      command.kind === 'guard'
+        ? playerAction({ type: 'guard' })
+        : command.kind === 'attack'
+          ? playerAction({ type: 'attack', targetId: targetId! })
+          : playerAction(
+              targetId !== undefined
+                ? { type: 'skill', skillId: command.skillId, targetId }
+                : { type: 'skill', skillId: command.skillId },
+            );
+    setNotice(
+      fail === 'not_enough_mp'
+        ? 'MPが足りない!'
+        : fail === 'silenced'
+          ? '沈黙していて詠唱できない!'
+          : fail === 'summon_limit'
+            ? 'これ以上召喚できない!'
+            : fail
+              ? '行動できない'
+              : undefined,
+    );
   };
 
+  /** コマンド選択: 有効な対象が1体だけなら選択ステップを飛ばして即実行する。 */
+  const beginCommand = (command: PendingCommand | { kind: 'guard' }): void => {
+    if (command.kind === 'guard') {
+      runAction(command);
+      return;
+    }
+    if (command.kind === 'skill') {
+      const scope = getSkillById(command.skillId).scope;
+      if (scope !== 'singleEnemy' && scope !== 'singleAlly') {
+        runAction(command); // 全体・自身対象は対象選択なし
+        return;
+      }
+    }
+    const pool = command.targetSide === 'enemy' ? enemies : partySide;
+    const valid = pool.filter(isAlive);
+    if (valid.length === 1) {
+      runAction(command, valid[0]!.id); // 対象が1体なら即実行
+      return;
+    }
+    setPending(command);
+  };
+
+  const targetSide = pending?.targetSide;
+
   const logLines = battleLog
-    .slice(-30)
+    .slice(-40)
     .map((e) => formatEvent(e, nameOf))
     .filter((line): line is string => line !== undefined)
     .slice(-8);
@@ -160,8 +203,20 @@ export function BattleScreen() {
   return (
     <div className="flex min-h-dvh flex-col gap-2 p-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
       <div className="flex items-center justify-between text-xs text-neutral-500">
-        <span>深度 {currentDepth} 層</span>
-        <span>ラウンド {battle.round}</span>
+        <span>
+          深度 {currentDepth} 層 / ラウンド {battle.round}
+        </span>
+        <button
+          type="button"
+          onClick={() => setAutoBattle(!autoBattle)}
+          className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
+            autoBattle
+              ? 'bg-amber-600 text-neutral-950'
+              : 'bg-neutral-800 text-neutral-400 active:bg-neutral-700'
+          }`}
+        >
+          オート {autoBattle ? 'ON' : 'OFF'}
+        </button>
       </div>
 
       {/* 敵 */}
@@ -171,8 +226,9 @@ export function BattleScreen() {
             key={enemy.id}
             combatant={enemy}
             active={enemy.id === actorId}
-            targetable={Boolean(needsTarget && isAlive(enemy))}
-            onSelect={() => act(enemy.id)}
+            targetable={Boolean(targetSide === 'enemy' && isAlive(enemy))}
+            dimmed={targetSide === 'party'}
+            onSelect={() => pending && runAction(pending, enemy.id)}
           />
         ))}
       </div>
@@ -192,57 +248,78 @@ export function BattleScreen() {
             key={member.id}
             combatant={member}
             active={member.id === actorId}
-            targetable={Boolean(needsAllyTarget && isAlive(member))}
-            onSelect={() => act(member.id)}
+            targetable={Boolean(targetSide === 'party' && isAlive(member))}
+            dimmed={targetSide === 'enemy'}
+            onSelect={() => pending && runAction(pending, member.id)}
           />
         ))}
       </div>
 
       {/* コマンド */}
-      {battle.phase === 'active' && actor && (
+      {battle.phase === 'active' && actor && !autoBattle && (
         <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-2">
-          <p className="mb-1 text-xs font-bold text-amber-400">{actor.name} のターン</p>
           {pending ? (
             <div className="flex items-center gap-2">
-              <p className="flex-1 text-sm text-neutral-300">
-                {needsTarget ? '対象の敵を選択' : needsAllyTarget ? '対象の味方を選択' : ''}
+              <p className="flex-1 text-sm font-bold text-rose-300">
+                {targetSide === 'enemy' ? '▲ 対象の敵をタップ' : '▼ 対象の味方をタップ'}
               </p>
-              <Button variant="ghost" onClick={() => setPending(undefined)}>
+              <Button variant="ghost" className="py-3" onClick={() => setPending(undefined)}>
                 やめる
               </Button>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-1">
-              <Button onClick={() => setPending({ kind: 'attack' })}>攻撃</Button>
-              {actor.skillIds.map((skillId) => {
-                const skill = getSkillById(skillId);
-                const scope = skill.scope;
-                const instant = scope !== 'singleEnemy' && scope !== 'singleAlly';
-                return (
-                  <Button
-                    key={skillId}
-                    variant="ghost"
-                    onClick={() => {
-                      if (instant) {
-                        setPending(undefined);
-                        const fail = playerAction({ type: 'skill', skillId });
-                        setNotice(fail === 'not_enough_mp' ? 'MPが足りない!' : fail ? '行動できない' : undefined);
-                      } else {
-                        setPending({ kind: 'skill', skillId });
+            <>
+              <p className="mb-1.5 text-xs font-bold text-amber-400">{actor.name} のターン</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <Button
+                  className="py-3 text-base"
+                  onClick={() => beginCommand({ kind: 'attack', targetSide: 'enemy' })}
+                >
+                  ⚔ 攻撃
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="py-3 text-base"
+                  onClick={() => beginCommand({ kind: 'guard' })}
+                >
+                  🛡 防御
+                </Button>
+                {actor.skillIds.map((skillId) => {
+                  const skill = getSkillById(skillId);
+                  const targetSideFor =
+                    skill.scope === 'singleAlly' || skill.scope === 'allAllies' || skill.scope === 'self'
+                      ? ('party' as const)
+                      : ('enemy' as const);
+                  const disabled =
+                    skill.mpCost > 0 &&
+                    (actor.currentMP < skill.mpCost ||
+                      actor.ailments.some((a) => a.type === 'silence'));
+                  return (
+                    <Button
+                      key={skillId}
+                      variant="ghost"
+                      className="py-3"
+                      disabled={disabled}
+                      onClick={() =>
+                        beginCommand({ kind: 'skill', skillId, targetSide: targetSideFor })
                       }
-                    }}
-                  >
-                    {skill.name}
-                    <span className="ml-1 text-[10px] opacity-70">MP{skill.mpCost}</span>
-                  </Button>
-                );
-              })}
-              <Button variant="ghost" onClick={() => { setPending(undefined); playerAction({ type: 'guard' }); }}>
-                防御
-              </Button>
-            </div>
+                    >
+                      {skill.name}
+                      {skill.mpCost > 0 && (
+                        <span className="ml-1 text-[10px] opacity-70">MP{skill.mpCost}</span>
+                      )}
+                    </Button>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
+      )}
+      {battle.phase === 'active' && autoBattle && (
+        <p className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-center text-xs text-neutral-400">
+          オート戦闘中…(右上のボタンで解除)
+        </p>
       )}
 
       {/* 結果 */}

@@ -80,6 +80,8 @@ interface GameStore {
   battle: BattleState | undefined;
   battleLog: BattleEvent[];
   lastRewards: BattleRewardSummary | undefined;
+  /** オート戦闘(味方の行動も自動選択)。セッション内で持続する。 */
+  autoBattle: boolean;
 
   // --- アクション ---
   setScreen(screen: Screen): void;
@@ -96,7 +98,9 @@ interface GameStore {
   sellItem(instanceId: string): void;
 
   enterDungeon(depth: number): void;
-  playerAction(action: CombatAction): ActionFailReason | undefined;
+  /** 'auto' を渡すと行動を自動選択する(オート戦闘)。 */
+  playerAction(action: CombatAction | 'auto'): ActionFailReason | undefined;
+  setAutoBattle(on: boolean): void;
   dismissRewards(goDeeper: boolean): void;
   retreat(): void;
 }
@@ -152,8 +156,10 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   battle: undefined,
   battleLog: [],
   lastRewards: undefined,
+  autoBattle: false,
 
   setScreen: (screen) => set({ screen }),
+  setAutoBattle: (on) => set({ autoBattle: on }),
 
   newGame: (members, seed) => {
     if (members.length === 0 || members.length > 4) {
@@ -352,7 +358,13 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const log: BattleEvent[] = [];
     let failReason: ActionFailReason | undefined;
     const { result: battle, rngState } = withRng(s.rngState, (rng) => {
-      const turn = executeTurn(s.battle!, rng, actorId, action, COMBAT_DATA);
+      // オート戦闘: 行動を自動選択し、実行不能(沈黙で詠唱不可等)なら防御に落とす
+      const chosen =
+        action === 'auto' ? chooseAutoAction(s.battle!, rng, actorId, COMBAT_DATA) : action;
+      let turn = executeTurn(s.battle!, rng, actorId, chosen, COMBAT_DATA);
+      if (!turn.ok && action === 'auto') {
+        turn = executeTurn(s.battle!, rng, actorId, { type: 'guard' }, COMBAT_DATA);
+      }
       if (!turn.ok) {
         failReason = turn.reason;
         return s.battle!;

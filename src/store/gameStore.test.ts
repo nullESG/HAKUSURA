@@ -222,6 +222,49 @@ describe('ゲームストア統合フロー', () => {
     expect(boosted).toBeGreaterThan(base);
   });
 
+  it("オート戦闘: playerAction('auto') だけで決着まで進められる", () => {
+    store().newGame(DEFAULT_PARTY, 3131);
+    store().enterDungeon(1);
+    for (let i = 0; i < 300; i++) {
+      const battle = store().battle;
+      if (!battle || battle.phase !== 'active') break;
+      expect(store().playerAction('auto')).toBeUndefined();
+    }
+    expect(store().battle!.phase).toBe('victory');
+    expect(store().lastRewards).toBeDefined();
+  });
+
+  it('オート戦闘: 沈黙中でも失敗せず行動できる(フォールバック)', () => {
+    store().newGame(DEFAULT_PARTY, 2929);
+    store().enterDungeon(1);
+    // 全員のスキル使用を沈黙で封じてもオートは進む
+    useGameStore.setState((s) => ({
+      battle: s.battle
+        ? {
+            ...s.battle,
+            combatants: s.battle.combatants.map((c) =>
+              c.side === 'party'
+                ? { ...c, ailments: [{ type: 'silence' as const, remainingTurns: 99, value: 0 }] }
+                : c,
+            ),
+          }
+        : undefined,
+    }));
+    for (let i = 0; i < 20; i++) {
+      const battle = store().battle;
+      if (!battle || battle.phase !== 'active') break;
+      expect(store().playerAction('auto')).toBeUndefined();
+    }
+  });
+
+  it('setAutoBattle でトグルが切り替わる', () => {
+    expect(store().autoBattle).toBe(false);
+    store().setAutoBattle(true);
+    expect(store().autoBattle).toBe(true);
+    store().setAutoBattle(false);
+    expect(store().autoBattle).toBe(false);
+  });
+
   it('決定論: 同じシード・同じ操作で同じ結果', () => {
     const run = (): { gold: number; invCount: number } => {
       store().newGame(DEFAULT_PARTY, 2026);
