@@ -17,6 +17,13 @@ export interface AilmentApplication {
   readonly value: number;
 }
 
+/** バフ/デバフの効果(kind が buff / debuff のスキルで使用。ブロックC拡張)。 */
+export interface BuffApplication {
+  /** stat → 加算値(デバフは負値)。戦闘中のみ有効。 */
+  readonly stats: StatMap;
+  readonly durationTurns: number;
+}
+
 /** アクティブスキル定義(仕様 §3「スキル定義のデータ構造」)。静的マスタ。 */
 export interface SkillDefinition {
   readonly id: string;
@@ -25,10 +32,19 @@ export interface SkillDefinition {
   readonly mpCost: number;
   /** ダメージ式の skillMultiplier(仕様 §4)。回復スキルでは回復倍率。 */
   readonly multiplier: number;
+  /**
+   * ダメージの参照ステータス。省略時は element が physical なら physATK、
+   * それ以外は magicATK(毒矢のような「物理の属性攻撃」だけ明示する)。
+   */
+  readonly attackSource?: 'phys' | 'magic';
   readonly element: ElementType;
   readonly scope: TargetScope;
   /** 付与する状態異常(複数可)。 */
   readonly ailments: readonly AilmentApplication[];
+  /** kind が buff / debuff の場合の効果。 */
+  readonly buff?: BuffApplication;
+  /** kind が summon の場合に召喚するユニット(敵定義を味方側で使う)。 */
+  readonly summonEnemyId?: string;
 }
 
 /** スキルツリーのノード(仕様 §3)。クラスごとのツリーを構成する静的マスタ。 */
