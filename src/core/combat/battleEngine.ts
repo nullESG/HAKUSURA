@@ -50,6 +50,10 @@ const BASIC_ATTACK: SkillDefinition = {
   ailments: [],
 };
 
+/** 追撃(攻撃速度%)の発動率上限とダメージ倍率(仮定)。 */
+const FOLLOWUP_CHANCE_CAP_PCT = 80;
+const FOLLOWUP_DAMAGE_SCALE = 0.5;
+
 /** 装備由来の状態異常付与に使う既定値(スキル側に指定が無い場合)。 */
 const DEFAULT_AILMENT_PARAMS: Readonly<Record<AilmentType, { duration: number; value: number }>> = {
   poison: { duration: 2, value: 5 },
@@ -151,6 +155,7 @@ function resolveAttackOnTarget(
   targetId: string,
   skill: SkillDefinition,
   events: BattleEvent[],
+  damageScale = 1,
 ): BattleState {
   let next = state;
   const actor = getCombatant(next, actorId)!;
@@ -183,6 +188,7 @@ function resolveAttackOnTarget(
   const crit = rng.roll(critChance);
 
   let damage = afterDef * rng.nextDoubleInRange(C.damageRandomMin, C.damageRandomMax);
+  damage *= damageScale;
   if (crit) damage *= actor.stats.critMultiplier;
   damage *= 1 + actorEff.dmgPctBonus / 100;
 
@@ -410,6 +416,30 @@ export function executeTurn(
       for (const id of targets as string[]) {
         if (getCombatant(next, actorId) && isAlive(getCombatant(next, actorId)!)) {
           next = resolveAttackOnTarget(next, rng, actorId, id, skill, events);
+        }
+      }
+      // 追撃: 通常攻撃のみ、攻撃速度%の確率で50%ダメージの追加攻撃(上限80%)
+      if (skill.id === BASIC_ATTACK.id) {
+        const attacker = getCombatant(next, actorId);
+        const firstTargetId = (targets as string[])[0];
+        const target = firstTargetId ? getCombatant(next, firstTargetId) : undefined;
+        if (attacker && isAlive(attacker) && target && isAlive(target)) {
+          const chance = Math.min(
+            FOLLOWUP_CHANCE_CAP_PCT,
+            effectiveValues(attacker).atkSpeedPct,
+          );
+          if (chance > 0 && rng.roll(chance)) {
+            events.push({ type: 'followup', actorId });
+            next = resolveAttackOnTarget(
+              next,
+              rng,
+              actorId,
+              firstTargetId!,
+              skill,
+              events,
+              FOLLOWUP_DAMAGE_SCALE,
+            );
+          }
         }
       }
       break;

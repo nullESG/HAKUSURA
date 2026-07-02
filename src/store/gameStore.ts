@@ -365,17 +365,20 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     // 戦闘終了処理
     if (battle.phase === 'victory') {
       const rewards = computeBattleRewards(battle);
-      const { result: drops, rngState: afterDrops } = withRng(rngState, (rng) => {
-        const magicFind = s.party.reduce(
-          (acc, c) => acc + buildCharacter(c, s.inventory, BUILD_DATA).derived.magicFindPct,
-          0,
-        );
-        return rollVictoryDrops(rng, rewards, s.currentDepth, magicFind, DUNGEON_DATA, MASTER_DATA);
-      });
-      // EXP はパーティ全員に均等付与(仮定)、gold_pct / exp_pct 補正は今後の課題
+      const builds = s.party.map((c) => buildCharacter(c, s.inventory, BUILD_DATA));
+      // Magic Find / gold% はパーティ合算、exp% はキャラ個別に適用(仮定)
+      const magicFind = builds.reduce((acc, b) => acc + b.derived.magicFindPct, 0);
+      const goldPct = builds.reduce((acc, b) => acc + b.derived.goldGainPct, 0);
+      const goldGained = Math.floor(rewards.gold * (1 + goldPct / 100));
+      const { result: drops, rngState: afterDrops } = withRng(rngState, (rng) =>
+        rollVictoryDrops(rng, rewards, s.currentDepth, magicFind, DUNGEON_DATA, MASTER_DATA),
+      );
       const levelUps: { name: string; level: number }[] = [];
-      const party = s.party.map((c) => {
-        const gained = gainExp(c, rewards.exp);
+      const party = s.party.map((c, i) => {
+        const expGained = Math.floor(
+          rewards.exp * (1 + builds[i]!.derived.expGainPct / 100),
+        );
+        const gained = gainExp(c, expGained);
         if (gained.levelsGained > 0) {
           levelUps.push({ name: c.name, level: gained.character.level });
         }
@@ -386,10 +389,10 @@ export const useGameStore = create<GameStore>()((set, get) => ({
         battle,
         battleLog: [...s.battleLog, ...log],
         party,
-        gold: s.gold + rewards.gold,
+        gold: s.gold + goldGained,
         inventory: [...s.inventory, ...drops],
         highestDepth: Math.max(s.highestDepth, s.currentDepth),
-        lastRewards: { exp: rewards.exp, gold: rewards.gold, drops, levelUps },
+        lastRewards: { exp: rewards.exp, gold: goldGained, drops, levelUps },
       });
       return undefined;
     }

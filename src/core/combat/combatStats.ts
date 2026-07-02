@@ -24,6 +24,7 @@ export function combatStatsFromDerived(derived: DerivedStats, mods: StatMap): Co
     baseHitChancePct: derived.baseHitChancePct,
     evasionPct: derived.evasionPct,
     blockPct: derived.blockPct,
+    atkSpeedPct: statOf(mods, 'atkSpeed_pct'),
     elementAtkFlat: derived.elementAtkFlat,
     elementResPct: derived.elementResPct,
     ailmentChancePct: {
@@ -71,6 +72,7 @@ export function combatStatsFromEnemy(
     baseHitChancePct: 90,
     evasionPct: scaledStats.evasionPct,
     blockPct: 0,
+    atkSpeedPct: 0,
     elementAtkFlat: zeroElementMap(),
     elementResPct: res,
     ailmentChancePct: {},
@@ -108,6 +110,7 @@ export interface EffectiveCombatValues {
   readonly speed: number;
   readonly evasionPct: number;
   readonly ailmentResPct: number;
+  readonly atkSpeedPct: number;
 }
 
 export function effectiveValues(combatant: CombatantState): EffectiveCombatValues {
@@ -122,6 +125,7 @@ export function effectiveValues(combatant: CombatantState): EffectiveCombatValue
       combatant.stats.speed * (1 + statOf(mods, 'speed_pct') / 100) * freezeFactor,
     evasionPct: combatant.stats.evasionPct + statOf(mods, 'evasion_pct'),
     ailmentResPct: combatant.stats.ailmentResPct + statOf(mods, 'ailmentRes_pct'),
+    atkSpeedPct: combatant.stats.atkSpeedPct + statOf(mods, 'atkSpeed_pct'),
   };
 }
 

@@ -194,6 +194,34 @@ describe('ゲームストア統合フロー', () => {
     expect(store().inventory.length).toBe(countBefore - 1);
   });
 
+  it('gold% 補正: 貪欲の指輪を装備すると同一シードの戦闘でゴールドが増える', async () => {
+    const { instantiateUnique } = await import('../core/drops/dropGenerator');
+    const { getUniqueById } = await import('../data/uniques');
+    const { GameRandom } = await import('../core/rng/gameRandom');
+    const { MASTER_DATA } = await import('../data');
+
+    const run = (withRing: boolean): number => {
+      store().newGame(DEFAULT_PARTY, 4242);
+      if (withRing) {
+        const ring = instantiateUnique(new GameRandom(1), getUniqueById('ring_of_greed'), 60, MASTER_DATA);
+        useGameStore.setState((s) => ({
+          inventory: [...s.inventory, ring],
+          party: s.party.map((c, i) =>
+            i === 0 ? { ...c, equipment: { ...c.equipment, ring1: ring.instanceId } } : c,
+          ),
+        }));
+      }
+      const goldBefore = store().gold;
+      store().enterDungeon(1);
+      fightUntilOver();
+      return store().lastRewards!.gold + (store().gold - goldBefore - store().lastRewards!.gold);
+    };
+    const base = run(false);
+    const boosted = run(true);
+    // 同一シードなので同一エンカウント・同一基礎報酬。指輪の gold% 分だけ増える
+    expect(boosted).toBeGreaterThan(base);
+  });
+
   it('決定論: 同じシード・同じ操作で同じ結果', () => {
     const run = (): { gold: number; invCount: number } => {
       store().newGame(DEFAULT_PARTY, 2026);

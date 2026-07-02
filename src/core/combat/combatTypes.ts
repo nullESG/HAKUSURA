@@ -18,6 +18,8 @@ export interface CombatStats {
   readonly baseHitChancePct: number;
   readonly evasionPct: number;
   readonly blockPct: number;
+  /** 攻撃速度%。通常攻撃時の追撃発動率になる(ブロックD磨き込みの仮定)。 */
+  readonly atkSpeedPct: number;
   readonly elementAtkFlat: Readonly<Record<ElementType, number>>;
   readonly elementResPct: Readonly<Record<ElementType, number>>;
   /** 攻撃時の状態異常付与%(装備・パッシブ由来。スキル分は加算)。 */
@@ -108,6 +110,7 @@ export type BattleEvent =
   | { type: 'ailment_expired'; targetId: string; ailment: AilmentType }
   | { type: 'regen'; targetId: string; hp: number; mp: number }
   | { type: 'paralyzed'; actorId: string }
+  | { type: 'followup'; actorId: string }
   | { type: 'thorns'; targetId: string; amount: number }
   | { type: 'leech'; actorId: string; hp: number; mp: number }
   | { type: 'summon'; actorId: string; summonId: string; name: string }

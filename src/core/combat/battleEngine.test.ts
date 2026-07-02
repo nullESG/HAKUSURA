@@ -33,6 +33,7 @@ function makeStats(overrides: Partial<CombatStats> = {}): CombatStats {
     baseHitChancePct: 100,
     evasionPct: 0,
     blockPct: 0,
+    atkSpeedPct: 0,
     elementAtkFlat: { physical: 0, fire: 0, ice: 0, lightning: 0, poison: 0, light: 0, dark: 0 },
     elementResPct: { physical: 0, fire: 0, ice: 0, lightning: 0, poison: 0, light: 0, dark: 0 },
     ailmentChancePct: {},
@@ -315,6 +316,48 @@ describe('戦闘エンジン(仕様 §4)', () => {
     const lowDmg = low.events.find((e) => e.type === 'damage')!;
     expect(lowDmg.amount).toBe(Math.floor(highDmg.amount * 1.5) + (highDmg.amount * 1.5 % 1 === 0 ? 0 : 0));
     expect(lowDmg.amount).toBeGreaterThan(highDmg.amount);
+  });
+
+  it('攻撃速度%で通常攻撃に追撃が発動する(50%ダメージ・上限80%)', () => {
+    const make = (atkSpeed: number): BattleState =>
+      createBattleState(
+        [makeCombatant('p1', 'party', { physATK: 40, speed: 20, atkSpeedPct: atkSpeed })],
+        [makeCombatant('e1', 'enemy', { speed: 1, maxHP: 100000 })],
+      );
+    // atkSpeed 0 では追撃なし
+    const rngZero = new GameRandom(11);
+    for (let i = 0; i < 50; i++) {
+      const r = executeTurn(make(0), rngZero, 'p1', { type: 'attack', targetId: 'e1' }, DATA);
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.events.some((e) => e.type === 'followup')).toBe(false);
+    }
+    // atkSpeed 200(上限80%)では高頻度で追撃、ダメージイベントが2つ
+    const rngFast = new GameRandom(12);
+    let followups = 0;
+    for (let i = 0; i < 200; i++) {
+      const r = executeTurn(make(200), rngFast, 'p1', { type: 'attack', targetId: 'e1' }, DATA);
+      if (!r.ok) throw new Error(r.reason);
+      const damages = r.events.filter((e) => e.type === 'damage');
+      if (r.events.some((e) => e.type === 'followup')) {
+        followups++;
+        expect(damages.length).toBe(2);
+        // 追撃は約50%ダメージ(乱数幅を考慮して 30〜70% の範囲)
+        expect(damages[1]!.amount).toBeGreaterThan(damages[0]!.amount * 0.3);
+        expect(damages[1]!.amount).toBeLessThan(damages[0]!.amount * 0.7 + 1);
+      }
+    }
+    // 発動率80%: 200回中 120〜200回の範囲(統計幅)
+    expect(followups).toBeGreaterThan(120);
+    // スキル攻撃では追撃しない
+    const skillUser = {
+      ...make(200),
+      combatants: make(200).combatants.map((c) =>
+        c.id === 'p1' ? { ...c, skillIds: ['power_strike'] } : c,
+      ),
+    };
+    const r = executeTurn(skillUser, new GameRandom(13), 'p1', { type: 'skill', skillId: 'power_strike', targetId: 'e1' }, DATA);
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.events.some((e) => e.type === 'followup')).toBe(false);
   });
 
   it('divine_guardian は致死ダメージを1回だけHP1で耐える', () => {

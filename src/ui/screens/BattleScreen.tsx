@@ -25,6 +25,8 @@ function formatEvent(event: BattleEvent, nameOf: (id: string) => string): string
       return `${nameOf(event.targetId)} は${AILMENT_LABELS[event.ailment]}で ${event.amount} ダメージ`;
     case 'paralyzed':
       return `${nameOf(event.actorId)} は麻痺して動けない`;
+    case 'followup':
+      return `${nameOf(event.actorId)} の追撃!`;
     case 'thorns':
       return `反射で ${nameOf(event.targetId)} に ${event.amount} ダメージ`;
     case 'summon':
