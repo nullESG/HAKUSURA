@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { isAlive, nextActorId } from '../../core/combat/battleEngine';
 import type { BattleEvent, CombatantState } from '../../core/combat/combatTypes';
+import { getEnemyById } from '../../data/enemies';
 import { getSkillById } from '../../data/skills';
 import { useGameStore } from '../../store/gameStore';
 import { AILMENT_LABELS, itemDisplayName, RARITY_TEXT_CLASS } from '../labels';
+import { MonsterArt } from '../components/MonsterArt';
 import { Bar, Button } from '../components/shared';
 
 /** オート戦闘の1手ごとの間隔(ms)。ログを目で追える速さ。 */
@@ -45,6 +47,15 @@ function formatEvent(event: BattleEvent, nameOf: (id: string) => string): string
   }
 }
 
+function isBossCombatant(combatant: CombatantState): boolean {
+  if (!combatant.enemyDefId) return false;
+  try {
+    return getEnemyById(combatant.enemyDefId).isBoss;
+  } catch {
+    return false;
+  }
+}
+
 function CombatantCard({
   combatant,
   active,
@@ -59,6 +70,8 @@ function CombatantCard({
   onSelect?: () => void;
 }) {
   const dead = !isAlive(combatant);
+  const showArt = combatant.enemyDefId !== undefined;
+  const boss = showArt && isBossCombatant(combatant);
   return (
     <button
       type="button"
@@ -76,28 +89,41 @@ function CombatantCard({
                 : 'border-neutral-800 bg-neutral-900'
       }`}
     >
-      <div className="flex items-center justify-between gap-1">
-        <span className="truncate text-xs font-bold">{combatant.name}</span>
-        <span className="text-[10px] text-neutral-500">Lv{combatant.level}</span>
-      </div>
-      <Bar value={combatant.currentHP} max={combatant.stats.maxHP} colorClass="bg-emerald-500" />
-      {combatant.stats.maxMP > 0 && (
-        <div className="mt-0.5">
-          <Bar value={combatant.currentMP} max={combatant.stats.maxMP} colorClass="bg-sky-500" />
+      <div className="flex items-center gap-2">
+        {showArt && (
+          <MonsterArt
+            enemyDefId={combatant.enemyDefId}
+            className={`${boss ? 'h-14 w-14' : 'h-10 w-10'} shrink-0 ${dead ? 'grayscale' : ''}`}
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-1">
+            <span className="truncate text-xs font-bold">
+              {boss && <span className="mr-1 text-[9px] font-black text-rose-400">BOSS</span>}
+              {combatant.name}
+            </span>
+            <span className="text-[10px] text-neutral-500">Lv{combatant.level}</span>
+          </div>
+          <Bar value={combatant.currentHP} max={combatant.stats.maxHP} colorClass="bg-emerald-500" />
+          {combatant.stats.maxMP > 0 && (
+            <div className="mt-0.5">
+              <Bar value={combatant.currentMP} max={combatant.stats.maxMP} colorClass="bg-sky-500" />
+            </div>
+          )}
+          <div className="mt-0.5 flex flex-wrap gap-0.5">
+            {combatant.ailments.map((a) => (
+              <span key={a.type} className="rounded bg-purple-900/80 px-1 text-[9px] text-purple-200">
+                {AILMENT_LABELS[a.type]}
+              </span>
+            ))}
+            {combatant.guarding && (
+              <span className="rounded bg-neutral-700 px-1 text-[9px]">防御</span>
+            )}
+            {combatant.buffs.length > 0 && (
+              <span className="rounded bg-amber-900/80 px-1 text-[9px] text-amber-200">強化</span>
+            )}
+          </div>
         </div>
-      )}
-      <div className="mt-0.5 flex flex-wrap gap-0.5">
-        {combatant.ailments.map((a) => (
-          <span key={a.type} className="rounded bg-purple-900/80 px-1 text-[9px] text-purple-200">
-            {AILMENT_LABELS[a.type]}
-          </span>
-        ))}
-        {combatant.guarding && (
-          <span className="rounded bg-neutral-700 px-1 text-[9px]">防御</span>
-        )}
-        {combatant.buffs.length > 0 && (
-          <span className="rounded bg-amber-900/80 px-1 text-[9px] text-amber-200">強化</span>
-        )}
       </div>
     </button>
   );
@@ -275,14 +301,14 @@ export function BattleScreen() {
                   className="py-3 text-base"
                   onClick={() => beginCommand({ kind: 'attack', targetSide: 'enemy' })}
                 >
-                  ⚔ 攻撃
+                  攻撃
                 </Button>
                 <Button
                   variant="ghost"
                   className="py-3 text-base"
                   onClick={() => beginCommand({ kind: 'guard' })}
                 >
-                  🛡 防御
+                  防御
                 </Button>
                 {actor.skillIds.map((skillId) => {
                   const skill = getSkillById(skillId);
