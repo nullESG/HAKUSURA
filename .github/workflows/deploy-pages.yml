@@ -3,11 +3,12 @@
 # 公開URL: https://nullesg.github.io/HAKUSURA/
 name: Deploy to GitHub Pages
 
+# github-pages 環境の保護ルールにより main 以外からのデプロイは拒否されるため、
+# トリガーは main のみとする(開発ブランチの検証は vitest + ビルドで担保)
 on:
   push:
     branches:
       - main
-      - claude/hopeful-wright-r59v4k
   workflow_dispatch:
 
 permissions:
