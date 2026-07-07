@@ -7,7 +7,9 @@ on:
   push:
     branches:
       - main
-      - claude/hopeful-wright-r59v4k
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
