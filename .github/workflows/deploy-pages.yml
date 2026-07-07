@@ -7,7 +7,9 @@ on:
   push:
     branches:
       - main
-      - claude/hopeful-wright-r59v4k
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -20,8 +22,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  test-build:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run
+      - run: npm run build -- --base=/HAKUSURA/
+
+  deploy:
+    needs: test-build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -32,8 +48,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx vitest run
-      # Pages はサブパス配信のため base を指定(vite-plugin-pwa も base に追従する)
       - run: npm run build -- --base=/HAKUSURA/
       - uses: actions/configure-pages@v5
         with:
