@@ -38,7 +38,7 @@ import { getClassById } from '../data/classes';
 import { craftGoldCost } from '../data/economy';
 import { getSkillTreeByClass } from '../data/skillTrees';
 
-export type Screen = 'title' | 'party' | 'inventory' | 'skills' | 'dungeon' | 'battle';
+export type Screen = 'title' | 'party' | 'inventory' | 'skills' | 'dungeon' | 'battle' | 'github-login' | 'github-repositories';
 
 /** 部位 → 装備できるアイテム種別。 */
 const SLOT_ACCEPTS: Readonly<Record<EquipSlot, readonly string[]>> = {

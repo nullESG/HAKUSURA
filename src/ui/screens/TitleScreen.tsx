@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { SaveSlotSummary } from '../../core/save/saveData';
 import { CLASS_DEFINITIONS } from '../../data/classes';
 import { useGameStore } from '../../store/gameStore';
+import { useGitHubAuthStore } from '../../integrations/github';
 import { Button, Panel } from '../components/shared';
 
 interface MemberDraft {
@@ -20,6 +21,8 @@ export function TitleScreen() {
   const newGame = useGameStore((s) => s.newGame);
   const loadGame = useGameStore((s) => s.loadGame);
   const listSlots = useGameStore((s) => s.listSlots);
+  const setScreen = useGameStore((s) => s.setScreen);
+  const { isAuthenticated } = useGitHubAuthStore();
   const [slots, setSlots] = useState<readonly SaveSlotSummary[]>([]);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<MemberDraft[]>(DEFAULT_DRAFT);
@@ -49,6 +52,13 @@ export function TitleScreen() {
               つづきから — {slot.partyNames.join('・')}(最深 {slot.highestDepth} 層)
             </Button>
           ))}
+          <Button
+            variant="ghost"
+            className="py-3"
+            onClick={() => setScreen(isAuthenticated ? 'github-repositories' : 'github-login')}
+          >
+            {isAuthenticated ? 'GitHub リポジトリ' : 'GitHub アカウント連携'}
+          </Button>
         </div>
       </div>
     );
